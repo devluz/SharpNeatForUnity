@@ -31,21 +31,52 @@ namespace Evolution_NEAT
             PassiveNeat neat = new PassiveNeat();
             neat.InitAndRun(2, 1, param, activationScheme, genomeParams, 150);
 
+            bool finished = false;
+            do
+            {
+                //rate everything
+                foreach (NeatGenome genome in neat._GenomeList)
+                {
+                    IBlackBox phenome = (IBlackBox)genome.CachedPhenome;
+                    if (null == phenome)
+                    {   // Decode the phenome and store a ref against the genome.
+                        phenome = (IBlackBox)neat._GenomeDecoder.Decode(genome);
+                        genome.CachedPhenome = phenome;
+                    }
+
+                    if (null == phenome)
+                    {   // Non-viable genome.
+                        genome.EvaluationInfo.SetFitness(0.0);
+                        genome.EvaluationInfo.AuxFitnessArr = null;
+                    }
+                    else
+                    {
+
+
+                        FitnessInfo fitnessInfo = new FitnessInfo();// _phenomeEvaluator.Evaluate(phenome);
+
+                        fitnessInfo._fitness = TestNetworkForXOR(phenome);
+                        genome.EvaluationInfo.SetFitness(fitnessInfo._fitness);
+                        genome.EvaluationInfo.AuxFitnessArr = fitnessInfo._auxFitnessArr;
+
+                        if (fitnessInfo._fitness > 10)
+                        {
+                            finished = true;
+                            break;
+                        }
+
+                    }
+                }
+
+                //calculate next generation
+            } while (neat.NextStep() && finished == false);
             //neat.Init(2, 1, 150, evaluator);
 
-            PassiveNeat.EvaluationTask task;
-            while (neat.WaitForEvaluation(out task))
-            {
-                task.resultingFitness = TestNetworkForXOR(task.mNetwork);
-                if (task.resultingFitness > 10)
-                {
-                    neat.LeaveAfterGeneration();
-                    Console.WriteLine("Found solution. Fitness " + task.resultingFitness);
-                }
-                neat.Continue(task);
+            //iterate now
 
-            }
-            Console.WriteLine("Finished after generation " + neat.NeatAlgorithm.CurrentGeneration);
+
+
+            Console.WriteLine("Finished after generation " + neat._NeatAlgorithm.CurrentGeneration);
             Console.ReadLine();
         }
 

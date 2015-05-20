@@ -39,6 +39,12 @@ namespace Evolution_NEAT
             set { mParams = value; }
         }
 
+        private IGenomeDecoder<NeatGenome, IBlackBox> mGenomeDecoder;
+        public IGenomeDecoder<NeatGenome, IBlackBox> _GenomeDecoder
+        {
+            get { return mGenomeDecoder; }
+        }
+
         private NeatGenomeParameters mGenomeParams = null;
         public NeatGenomeParameters _GenomeParams
         {
@@ -57,15 +63,20 @@ namespace Evolution_NEAT
         /// </summary>
         private List<NeatGenome> mGenomeList;
 
+        public List<NeatGenome> _GenomeList
+        {
+            get { return mGenomeList; }
+        }
+
 
         private NeatEvolutionAlgorithm<NeatGenome> mNeatAlgorithm;
 
-        public NeatEvolutionAlgorithm<NeatGenome> NeatAlgorithm
+        public NeatEvolutionAlgorithm<NeatGenome> _NeatAlgorithm
         {
             get { return mNeatAlgorithm; }
         }
 
-        private EnumEvaluator mEvaluator = new EnumEvaluator();
+        
 
         public PassiveNeat()
         {
@@ -82,44 +93,44 @@ namespace Evolution_NEAT
             mParams = param;
             mActivationScheme = activationScheme;
             mGenomeParams = genomeParams;
-            Thread t = new Thread(() =>
-            {
-                mEvaluator._State = State.Calculating;
-                Init(inputCount, outputCount, popultionCount);
-                Start();
-            });
-            t.Start();
+            Init(inputCount, outputCount, popultionCount);
+            //Start();
         }
 
-        public void InitAndRun(int inputCount,
-                                int outputCount,
-                                NeatEvolutionAlgorithmParameters param,
-                                NetworkActivationScheme activationScheme,
-                                NeatGenomeParameters genomeParams,
-                                XmlReader reader)
-        {
-            mParams = param;
-            mGenomeParams = genomeParams;
-            Thread t = new Thread(() =>
-            {
-                mEvaluator._State = State.Calculating;
-                Init(inputCount, outputCount, reader);
-                Start();
-            });
-            t.Start();
-        }
+        //public void InitAndRun(int inputCount,
+        //                        int outputCount,
+        //                        NeatEvolutionAlgorithmParameters param,
+        //                        NetworkActivationScheme activationScheme,
+        //                        NeatGenomeParameters genomeParams,
+        //                        XmlReader reader)
+        //{
+        //    mParams = param;
+        //    mGenomeParams = genomeParams;
+        //    Thread t = new Thread(() =>
+        //    {
+        //        mEvaluator._State = State.Calculating;
+        //        Init(inputCount, outputCount, reader);
+        //        Start();
+        //    });
+        //    t.Start();
+        //}
 
 
-        private void Init(int inputCount, int outputCount, int popultionCount)
+        private void Init(int inputCount, int outputCount, int populationCount)
         {
             mInputCount = inputCount;
             mOutputCount = outputCount;
 
+            mGenomeDecoder = new NeatGenomeDecoder(mActivationScheme);
 
 
-            //First step is we configurate the network and create the genomes that encode them
-            GenerateGenomeList(popultionCount);
-            InitAlgorithm();
+            // Create a genome factory with our neat genome parameters object and the appropriate number of input and output neuron genes.
+            mGenomeFactory = new NeatGenomeFactory(mInputCount, mOutputCount, mGenomeParams);
+
+            // Create an initial population of randomly generated genomes.
+            mGenomeList = mGenomeFactory.CreateGenomeList(populationCount, 0);
+
+            mNeatAlgorithm = CreateEvolutionAlgorithm();
         }
         private void Init(int inputCount, int outputCount, XmlReader xmlGenomeList)
         {
@@ -128,40 +139,21 @@ namespace Evolution_NEAT
 
 
             ReadGenomeList(xmlGenomeList);
-            InitAlgorithm();
-        }
-        private void InitAlgorithm()
-        {
-
-            // Create evolution algorithm and attach update event.
-            mNeatAlgorithm = CreateEvolutionAlgorithm(mGenomeFactory, mGenomeList, mEvaluator);
-            mNeatAlgorithm.UpdateEvent += UpdateEvent;
-
-            mNeatAlgorithm.UpdateScheme = new UpdateScheme(1);
+            mNeatAlgorithm = CreateEvolutionAlgorithm();
+            mNeatAlgorithm.Initialize(new PassiveListEvaluator(), mGenomeFactory, mGenomeList);
         }
 
 
-        private void UpdateEvent(object sender, EventArgs args)
-        {
-            mEvaluator.OnGenerationFinished();
-        }
+
+
 
         private void Start()
         {
-
-            // Start algorithm (it will run on a background thread).
             mNeatAlgorithm.StartContinue();
 
         }
 
-        private void GenerateGenomeList(int populationCount)
-        {
-            // Create a genome factory with our neat genome parameters object and the appropriate number of input and output neuron genes.
-            mGenomeFactory = new NeatGenomeFactory(mInputCount, mOutputCount, mGenomeParams);
 
-            // Create an initial population of randomly generated genomes.
-            mGenomeList = mGenomeFactory.CreateGenomeList(populationCount, 0);
-        }
         private void ReadGenomeList(XmlReader xmlGenomeList)
         {
             mGenomeFactory = (NeatGenomeFactory)new NeatGenomeFactory(mInputCount, mOutputCount, mGenomeParams);
@@ -171,10 +163,39 @@ namespace Evolution_NEAT
 
         }
 
-        public void NextStep()
+        public bool NextStep()
         {
-            throw new NotImplementedException();
-            //mNeatAlgorithm.CalcNextGeneration();
+            //first step is the initialization and the first rating + creation of species
+            if (mNeatAlgorithm.SpecieList == null)
+            {
+                mNeatAlgorithm.Initialize(new PassiveListEvaluator(), mGenomeFactory, mGenomeList);
+            }
+            else
+            {
+                ((PassiveNeatAlgorithm)mNeatAlgorithm).CalcNextGeneration();
+            }
+            return true;
+        }
+
+
+        private class PassiveNeatAlgorithm : NeatEvolutionAlgorithm<NeatGenome>
+        {
+            /// <summary>
+            /// Constructs with the provided NeatEvolutionAlgorithmParameters and ISpeciationStrategy.
+            /// </summary>
+            public PassiveNeatAlgorithm(NeatEvolutionAlgorithmParameters eaParams,
+                                        ISpeciationStrategy<NeatGenome> speciationStrategy,
+                                        IComplexityRegulationStrategy complexityRegulationStrategy)
+            : base(eaParams, speciationStrategy, complexityRegulationStrategy)
+            {
+
+            }
+
+            public void CalcNextGeneration()
+            {
+                _currentGeneration++;
+                this.PerformOneGeneration();
+            }
         }
 
 
@@ -183,7 +204,7 @@ namespace Evolution_NEAT
         /// of the algorithm are also constructed and connected up.
         /// This overload accepts a pre-built genome population and their associated/parent genome factory.
         /// </summary>
-        public NeatEvolutionAlgorithm<NeatGenome> CreateEvolutionAlgorithm(IGenomeFactory<NeatGenome> genomeFactory, List<NeatGenome> genomeList, IPhenomeEvaluator<IBlackBox> evaluator)
+        public NeatEvolutionAlgorithm<NeatGenome> CreateEvolutionAlgorithm()
         {
             // Create distance metric. Mismatched genes have a fixed distance of 10; for matched genes the distance is their weigth difference.
             IDistanceMetric distanceMetric = new ManhattanDistanceMetric(1.0, 0.0, 10.0);
@@ -196,16 +217,16 @@ namespace Evolution_NEAT
             IComplexityRegulationStrategy complexityRegulationStrategy = new NullComplexityRegulationStrategy();
 
             // Create the evolution algorithm.
-            NeatEvolutionAlgorithm<NeatGenome> ea = new NeatEvolutionAlgorithm<NeatGenome>(mParams, speciationStrategy, complexityRegulationStrategy);
+            NeatEvolutionAlgorithm<NeatGenome> ea = new PassiveNeatAlgorithm(mParams, speciationStrategy, complexityRegulationStrategy);
 
 
             // Create genome decoder.
-            IGenomeDecoder<NeatGenome, IBlackBox> genomeDecoder = new NeatGenomeDecoder(mActivationScheme);
 
             // Create a genome list evaluator. This packages up the genome decoder with the genome evaluator.
             //IGenomeListEvaluator<NeatGenome> innerEvaluator = new ParallelGenomeListEvaluator<NeatGenome, IBlackBox>(genomeDecoder, evaluator, _parallelOptions);
-            IGenomeListEvaluator<NeatGenome> innerEvaluator = new SerialGenomeListEvaluator<NeatGenome, IBlackBox>(genomeDecoder, evaluator);
-
+            
+            //IGenomeListEvaluator<NeatGenome> innerEvaluator = new SerialGenomeListEvaluator<NeatGenome, IBlackBox>(genomeDecoder, evaluator);
+            //IGenomeListEvaluator<NeatGenome> innerEvaluator = new PassiveListEvaluator();
 
 
 
@@ -218,26 +239,16 @@ namespace Evolution_NEAT
             //                                                                        innerEvaluator,
             //                                                                        SelectiveGenomeListEvaluator<NeatGenome>.CreatePredicate_OnceOnly());
             // Initialize the evolution algorithm.
-            ea.Initialize(innerEvaluator, genomeFactory, genomeList);
+            
+
 
             // Finished. Return the evolution algorithm
             return ea;
         }
 
 
-        public bool WaitForEvaluation(out EvaluationTask task)
-        {
-            return mEvaluator.WaitForEvaluation(out task);
-        }
-        public void Continue(EvaluationTask task)
-        {
-            mEvaluator.Continue(task);
-        }
-        public void LeaveAfterGeneration()
-        {
-            mEvaluator.Finish();
-        }
 
+        
 
         public struct EvaluationTask
         {
@@ -255,133 +266,30 @@ namespace Evolution_NEAT
             Error
         }
 
-        public State _State
+
+
+        private class PassiveListEvaluator : IGenomeListEvaluator<NeatGenome>
         {
-            get
-            {
-
-                return mEvaluator._State;
-            }
-        }
-        private class EnumEvaluator : IPhenomeEvaluator<IBlackBox>
-        {
-
-            private State mState = State.Uninitialized;
-
-            public State _State
-            {
-                get { return mState; }
-                set { mState = value; }
-            }
-
-            private EvaluationTask mCurrentTask;
-
-            //used to wait for outside thread for the evaluator. will be released if the evaluation can begin
-            private AutoResetEvent mWaitForEvaluationBegin = new AutoResetEvent(false);
-
-            //Allows this thread to wait until the outside finished the evaluation
-            private AutoResetEvent mWaitForEvaluationEnded = new AutoResetEvent(false);
-
-
-
-
-
-            ulong mEvalCount = 0;
+            private ulong mEvaluationCount = 0;
             public ulong EvaluationCount
             {
-                get { return mEvalCount; }
+                get { return mEvaluationCount; }
             }
 
-            private bool isStopConditionSatisfied;
             public bool StopConditionSatisfied
             {
-                get { return isStopConditionSatisfied; }
+                get { return false; }
             }
 
-
-            public void Finish()
+            public void Evaluate(IList<NeatGenome> genomeList)
             {
-                isStopConditionSatisfied = true;
+
+                mEvaluationCount += (ulong)genomeList.Count;
             }
 
-
-
-            public bool WaitForEvaluation(out EvaluationTask task)
-            {
-                do
-                {
-                    // didn't get a task yet. time to give up?
-                    if (mState == State.ShutDown)
-                    {
-                        task = new EvaluationTask();
-                        return false;
-                    }
-                }
-                while (mWaitForEvaluationBegin.WaitOne(50) == false);
-
-                if (mState != State.WaitForEvaluationBegin)
-                {
-                    mState = State.Error;
-                    throw new InvalidOperationException("Threads out of sync. State: " + mState + " instead of " + State.WaitForEvaluationBegin);
-                }
-                //Console.WriteLine("WaitForEvaluationFinished");
-                mState = State.WaitForEvaluationFinished;
-                task = mCurrentTask;
-                return true;
-            }
-
-
-            public void Continue(EvaluationTask task)
+            public void Reset()
             {
 
-                if (mState != State.WaitForEvaluationFinished)
-                {
-                    mState = State.Error;
-                    throw new InvalidOperationException("Threads out of sync. State: " + mState + " instead of " + State.WaitForEvaluationFinished);
-                }
-
-                mCurrentTask = task;
-                //Console.WriteLine("Calculating");
-                mState = State.Calculating;
-                mWaitForEvaluationEnded.Set();
-            }
-
-            public void OnGenerationFinished()
-            {
-                if (isStopConditionSatisfied)
-                {
-                    if (mState != State.Calculating)
-                    {
-                        mState = State.Error;
-                        throw new InvalidOperationException("Threads out of sync. State: " + mState + " instead of " + State.WaitForEvaluationFinished);
-                    }
-                    mState = State.ShutDown;
-                }
-            }
-            public FitnessInfo Evaluate(IBlackBox box)
-            {
-                mEvalCount++;
-
-                mCurrentTask = new EvaluationTask();
-                mCurrentTask.mNetwork = box;
-
-
-                if (mState != State.Calculating)
-                {
-                    mState = State.Error;
-                    throw new InvalidOperationException("Threads out of sync. State: " + mState + " instead of " + State.Calculating);
-                }
-                //Console.WriteLine("WaitForEvaluationBegin");
-                mState = State.WaitForEvaluationBegin;
-                mWaitForEvaluationBegin.Set();
-                mWaitForEvaluationEnded.WaitOne();
-
-
-                //double fitness = TestNetwork(box);
-                return new FitnessInfo(mCurrentTask.resultingFitness, mCurrentTask.resultingFitness);
-            }
-            public virtual void Reset()
-            {
             }
         }
 
