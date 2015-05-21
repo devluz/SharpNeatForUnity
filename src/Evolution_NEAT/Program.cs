@@ -50,6 +50,8 @@ namespace Evolution_NEAT
             //iterator over generations
             do
             {
+                neat.StartGeneration();
+
                 //now iterating over every gene to test it
                 Evolution_NEAT.PassiveNeat.FitnessEvaluationEnumerator en = neat.GetReusableFitnessEnumerator();
 
@@ -62,7 +64,8 @@ namespace Evolution_NEAT
                 }
 
                 //calculate next generation
-            } while (neat.NextGeneration() && finished == false);
+                neat.FinishGeneration();
+            } while (finished == false);
             //neat.Init(2, 1, 150, evaluator);
 
             //iterate now

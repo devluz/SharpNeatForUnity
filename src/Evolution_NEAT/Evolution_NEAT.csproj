@@ -43,6 +43,7 @@
   <ItemGroup>
     <Compile Include="EnumerableNeat.cs" />
     <Compile Include="PassiveNeat.cs" />
+    <Compile Include="PassiveNeatAlgorithm.cs" />
     <Compile Include="SimpleNeat.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

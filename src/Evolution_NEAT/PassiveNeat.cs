@@ -73,9 +73,9 @@ namespace Evolution_NEAT
         private IComplexityRegulationStrategy mComplexityRegulationStrategy;
 
 
-        private NeatEvolutionAlgorithm<NeatGenome> mNeatAlgorithm;
+        private PassiveNeatAlgorithm mNeatAlgorithm;
 
-        public NeatEvolutionAlgorithm<NeatGenome> _NeatAlgorithm
+        public PassiveNeatAlgorithm _NeatAlgorithm
         {
             get { return mNeatAlgorithm; }
         }
@@ -84,7 +84,14 @@ namespace Evolution_NEAT
 
         private FitnessEvaluationEnumerator mReuseEnumerator;
 
-        
+        //temporary variables stored during shift to the next generation
+        private bool mInGenerationShift = false;
+        public bool _InGenerationShift
+        {
+            get { return mInGenerationShift; }
+        }
+        private bool mTmpEmptySpeciesFlag;
+        private List<NeatGenome> mTmpOffspringList;
 
         public PassiveNeat()
         {
@@ -150,19 +157,50 @@ namespace Evolution_NEAT
             xmlGenomeList.Close();
         }
 
-        public bool NextGeneration()
+
+
+        public void StartGeneration()
         {
-            //first step is the initialization and the first rating + creation of species
             if (mNeatAlgorithm.SpecieList == null)
             {
+                //not yet fully initialized. wait until the first time FinishGeneration is called and the first generation is ready
+            }
+            else
+            {
+                mInGenerationShift = true;
+                this._NeatAlgorithm.IncreaseGenerationCounter();
+                this._NeatAlgorithm.PerformOneGeneration_BeforeEvaluation(out mTmpEmptySpeciesFlag, out mTmpOffspringList);
+                this._NeatAlgorithm.PerformOneGeneration_Evaluation();
+            }
+        }
+
+        public void FinishGeneration()
+        {
+
+            if (mNeatAlgorithm.SpecieList == null)
+            {
+                //user evauluated the first generation. initialize the whole neat algoirthm now
                 mNeatAlgorithm.Initialize(new PassiveListEvaluator(), mGenomeFactory, mGenomeList);
             }
             else
             {
-                ((PassiveNeatAlgorithm)mNeatAlgorithm).CalcNextGeneration();
+                this._NeatAlgorithm.PerformOneGeneration_AfterEvaluation(mTmpEmptySpeciesFlag, mTmpOffspringList);
+                mInGenerationShift = false;
             }
-            return true;
         }
+        //public bool NextGeneration()
+        //{
+        //    //first step is the initialization and the first rating + creation of species
+        //    if (mNeatAlgorithm.SpecieList == null)
+        //    {
+        //        mNeatAlgorithm.Initialize(new PassiveListEvaluator(), mGenomeFactory, mGenomeList);
+        //    }
+        //    else
+        //    {
+        //        ((PassiveNeatAlgorithm)mNeatAlgorithm).CalcNextGeneration();
+        //    }
+        //    return true;
+        //}
 
         /// <summary>
         /// This will return an emumerator for all Genomes + allow easy cached access to the neuronal networks for fitness evaluation
@@ -272,28 +310,7 @@ namespace Evolution_NEAT
             }
         }
 
-        private class PassiveNeatAlgorithm : NeatEvolutionAlgorithm<NeatGenome>
-        {
-            /// <summary>
-            /// Constructs with the provided NeatEvolutionAlgorithmParameters and ISpeciationStrategy.
-            /// </summary>
-            public PassiveNeatAlgorithm(NeatEvolutionAlgorithmParameters eaParams,
-                                        ISpeciationStrategy<NeatGenome> speciationStrategy,
-                                        IComplexityRegulationStrategy complexityRegulationStrategy)
-            : base(eaParams, speciationStrategy, complexityRegulationStrategy)
-            {
 
-            }
-
-            public void CalcNextGeneration()
-            {
-                _currentGeneration++;
-                this.PerformOneGeneration();
-            }
-
-
-
-        }
 
         private class PassiveListEvaluator : IGenomeListEvaluator<NeatGenome>
         {
