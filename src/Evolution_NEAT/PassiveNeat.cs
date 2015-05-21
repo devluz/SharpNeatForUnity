@@ -257,6 +257,11 @@ namespace Evolution_NEAT
             private PassiveNeat mNeat;
             private int mIndex = -1;
 
+            public int _Index
+            {
+                get { return mIndex; }
+            }
+
             private FitnessEvaluation mCurrentEvaluation; //reference will be reused
 
             public FitnessEvaluation Current

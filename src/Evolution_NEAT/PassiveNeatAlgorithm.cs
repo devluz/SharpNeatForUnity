@@ -854,7 +854,7 @@ namespace Evolution_NEAT
         {
             int count = specieStatsArr.Length;
             for(int i=0; i<count; i++) {
-                Debug.Write("[" + _specieList[i].GenomeList.Count.ToString() + "," + specieStatsArr[i]._targetSizeInt + "] " );
+                Debug.WriteLine("[" + _specieList[i].GenomeList.Count.ToString() + "," + specieStatsArr[i]._targetSizeInt + "] " );
             }
             Debug.WriteLine(String.Empty);
         }
