@@ -24,12 +24,12 @@ namespace Evolution_NEAT
 
 
 
-            Console.WriteLine("TestPassiveNeat:");
-            for (int i = 0; i < 10; i++ )
-            {
-                TestPassiveNeat();
-            }
-
+            //Console.WriteLine("TestPassiveNeat:");
+            //for (int i = 0; i < 10; i++ )
+            //{
+            //    TestPassiveNeat();
+            //}
+            TestMemory();
             Console.ReadLine();
 
         }
@@ -65,6 +65,72 @@ namespace Evolution_NEAT
 
                 //calculate next generation
                 neat.FinishGeneration();
+            } while (finished == false);
+            //neat.Init(2, 1, 150, evaluator);
+
+            //iterate now
+
+
+
+            Console.WriteLine("Finished after generation " + neat._NeatAlgorithm.CurrentGeneration + " fitness " + neat._NeatAlgorithm.CurrentChampGenome.EvaluationInfo.MostRecentFitness);
+        }
+
+        public static void TestMemory()
+        {
+            NeatEvolutionAlgorithmParameters param = new NeatEvolutionAlgorithmParameters();
+            NetworkActivationScheme activationScheme = NetworkActivationScheme.CreateCyclicFixedTimestepsScheme(1);
+            NeatGenomeParameters genomeParams = new NeatGenomeParameters();
+
+            //SimpleXorEvaluator evaluator = new SimpleXorEvaluator();
+            // Create IBlackBox evaluator.
+            //XorBlackBoxEvaluator evaluator = new XorBlackBoxEvaluator();
+            PassiveNeat neat = new PassiveNeat();
+            neat.Init(1, 1, param, activationScheme, genomeParams, 150);
+
+            
+            bool finished = false;
+
+            //iterator over generations
+            do
+            {
+                neat.StartGeneration();
+
+                //now iterating over every gene to test it
+                Evolution_NEAT.PassiveNeat.FitnessEvaluationEnumerator en = neat.GetReusableFitnessEnumerator();
+                Random r = new Random(0);
+                while (en.MoveNext())
+                {
+                    IBlackBox box = en.Current.Network;
+                    ISignalArray inputArr = box.InputSignalArray;
+                    ISignalArray outputArr = box.OutputSignalArray;
+                    double fitness = 0;
+                    double firstVal = r.NextDouble();
+                    double secVal = r.NextDouble();
+
+                    inputArr[0] = firstVal;
+                    box.Activate();
+                    for(int i = 0; i < 100; i++)
+                    {
+                        inputArr[0] = secVal;
+                        box.Activate();
+                        if (!box.IsStateValid)
+                        {
+                            fitness = 0;
+                            break;
+                        }
+                        double error = Math.Abs(firstVal - outputArr[0]);
+                        if (error < 0.05f)
+                            error = 0;
+                        fitness += (1 - error);
+                        firstVal = secVal;
+                        secVal = r.NextDouble();
+                    }
+                    en.Current._Genome.EvaluationInfo.SetFitness(fitness);
+                }
+
+                //calculate next generation
+                neat.FinishGeneration();
+                Console.WriteLine(neat._NeatAlgorithm.Statistics._maxFitness);
             } while (finished == false);
             //neat.Init(2, 1, 150, evaluator);
 
