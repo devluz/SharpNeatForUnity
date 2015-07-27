@@ -1,4 +1,5 @@
-﻿/* ***************************************************************************
+﻿using System;
+/* ***************************************************************************
  * This file is part of SharpNEAT - Evolution of Neural Networks.
  * 
  * Copyright 2004-2006, 2009-2010 Colin Green (sharpneat@gmail.com)
@@ -40,7 +41,12 @@ namespace SharpNeat.Utility
             string localName = MoveToElement(xr, skipCurrent);            
             if(localName != elemName)
             {   // No element or unexpected element.
+#if NET4
                 throw new InvalidDataException(string.Format("Expected element [{0}], encountered [{1}]", elemName, localName));
+#else
+                throw new InvalidOperationException(string.Format("Expected element [{0}], encountered [{1}]", elemName, localName));
+
+#endif
             }
         }
 
