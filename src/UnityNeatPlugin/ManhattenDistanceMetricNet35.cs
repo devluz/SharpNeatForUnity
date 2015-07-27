@@ -1,29 +1,8 @@
-/* ***************************************************************************
- * This file is part of SharpNEAT - Evolution of Neural Networks.
- * 
- * Copyright 2004-2006, 2009-2010 Colin Green (sharpneat@gmail.com)
- *
- * SharpNEAT is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * SharpNEAT is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with SharpNEAT.  If not, see <http://www.gnu.org/licenses/>.
- */
-#if NET4
-using System;
-using System.Collections.Concurrent;
+﻿using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using SharpNeat.Core;
 
-namespace SharpNeat.DistanceMetrics
+namespace UnityNeatPlugin
 {
     /// <summary>
     /// Manhattan distance metric.
@@ -50,7 +29,7 @@ namespace SharpNeat.DistanceMetrics
     /// 2) Topology only distance metric (ignore connections weights).
     /// 3) Equivalent of genome distance in Original NEAT (O-NEAT). This is actually a mix of (1) and (2).
     /// </summary>
-    public class ManhattanDistanceMetric : IDistanceMetric
+    public class ManhattanDistanceMetricNet35 : IDistanceMetric
     {
         /// <summary>A coefficient to applied to the distance obtained from two coordinates that both 
         /// describe a position in a given dimension.</summary>
@@ -68,7 +47,7 @@ namespace SharpNeat.DistanceMetrics
         /// Constructs using default weightings for comparisons on matching and mismatching dimensions.
         /// Classical Manhattan Distance.
         /// </summary>
-        public ManhattanDistanceMetric() : this(1.0, 1.0, 0.0)
+        public ManhattanDistanceMetricNet35() : this(1.0, 1.0, 0.0)
         {
         }
 
@@ -81,7 +60,7 @@ namespace SharpNeat.DistanceMetrics
         /// a position in a given dimension. The other point is taken to be at position zero in that dimension.</param>
         /// <param name="mismatchDistanceConstant">A constant that is added to the distance where only one of the coordinates describes a position in a given dimension.
         /// This adds extra emphasis to distance when comparing coordinates that exist in different dimesions.</param>
-        public ManhattanDistanceMetric(double matchDistanceCoeff, double mismatchDistanceCoeff, double mismatchDistanceConstant)
+        public ManhattanDistanceMetricNet35(double matchDistanceCoeff, double mismatchDistanceCoeff, double mismatchDistanceConstant)
         {
             _matchDistanceCoeff = matchDistanceCoeff;
             _mismatchDistanceCoeff = mismatchDistanceCoeff;
@@ -506,12 +485,11 @@ namespace SharpNeat.DistanceMetrics
             // then divide the totals by the number of CoordinateVectors to get the average for each ID. That is, we 
             // calculate the component-wise mean.
 
-            // ConcurrentDictionary provides a low-locking strategy that greatly improves performance here 
-            // compared to using mutual exclusion locks or even ReadWriterLock(s).
-            ConcurrentDictionary<ulong,double[]> coordElemTotals = new ConcurrentDictionary<ulong, double[]>();
+
+            Dictionary<ulong,double[]> coordElemTotals = new Dictionary<ulong, double[]>();
 
             // Loop over coords.
-            Parallel.ForEach(coordList, delegate(CoordinateVector coord)
+            foreach(CoordinateVector coord in coordList)
             {
                 // Loop over each element within the current coord.
                 foreach (KeyValuePair<ulong, double> coordElem in coord.CoordArray)
@@ -538,19 +516,10 @@ namespace SharpNeat.DistanceMetrics
                     else
                     {
                         doubleWrapper = new double[] { coordElem.Value };
-                        if (!coordElemTotals.TryAdd(coordElem.Key, doubleWrapper))
-                        {
-                            if(coordElemTotals.TryGetValue(coordElem.Key, out doubleWrapper))
-                            {
-                                lock (doubleWrapper)
-                                {
-                                    doubleWrapper[0] += coordElem.Value;
-                                }
-                            }
-                        }
+                        coordElemTotals[coordElem.Key] =  doubleWrapper;
                     }
                 }
-            });
+            };
 
             // Put the unique coord elems from coordElemTotals into a list, dividing each element's value
             // by the total number of coords as we go.
@@ -581,4 +550,3 @@ namespace SharpNeat.DistanceMetrics
         #endregion
     }
 }
-#endif

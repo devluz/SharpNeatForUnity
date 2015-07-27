@@ -20,9 +20,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using log4net;
 using SharpNeat.Core;
-using System.Threading.Tasks;
 
 // Disable missing comment warnings for non-private variables.
 #pragma warning disable 1591
@@ -36,8 +34,9 @@ namespace SharpNeat.EvolutionAlgorithms
     public abstract class AbstractGenerationalAlgorithm<TGenome> : IEvolutionAlgorithm<TGenome>
         where TGenome : class, IGenome<TGenome>
     {
+#if NET4
         private static readonly ILog __log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-
+#endif
         #region Instance Fields
 
         protected IGenomeListEvaluator<TGenome> _genomeListEvaluator;
@@ -187,7 +186,10 @@ namespace SharpNeat.EvolutionAlgorithms
             }
             else if(RunState.Running == _runState)
             {   // Already running. Log a warning.
+                
+#if NET4
                 __log.Warn("StartContinue() called but algorithm is already running.");
+#endif
             }
             else
             {
@@ -213,8 +215,12 @@ namespace SharpNeat.EvolutionAlgorithms
             if(RunState.Running == _runState) {
                 _pauseRequestFlag = true;
             }
-            else {
-                __log.Warn("RequestPause() called but algorithm is not running.");
+            else
+            {
+#if NET4
+                    __log.Warn("RequestPause() called but algorithm is not running.");
+#endif
+
             }
         }
 
@@ -235,7 +241,9 @@ namespace SharpNeat.EvolutionAlgorithms
             }
             else 
             {
+#if NET4
                 __log.Warn("RequestPauseAndWait() called but algorithm is not running.");
+#endif
             }
         }
 
@@ -307,8 +315,11 @@ namespace SharpNeat.EvolutionAlgorithms
                     UpdateEvent(this, EventArgs.Empty);
                 }
                 catch(Exception ex) {
+                    
+#if NET4
                     __log.Error("UpdateEvent listener threw exception", ex);
-                }
+#endif
+                                    }
             }
         }
 
@@ -320,8 +331,11 @@ namespace SharpNeat.EvolutionAlgorithms
                 try {
                     PausedEvent(this, EventArgs.Empty);
                 }
-                catch(Exception ex) {
+                catch(Exception ex)
+                {
+#if NET4
                     __log.Error("PausedEvent listener threw exception", ex);
+#endif
                 }
             }
         }

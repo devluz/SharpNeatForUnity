@@ -1,42 +1,43 @@
-/* ***************************************************************************
- * This file is part of SharpNEAT - Evolution of Neural Networks.
- * 
- * Copyright 2004-2006, 2009-2010 Colin Green (sharpneat@gmail.com)
- *
- * SharpNEAT is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * SharpNEAT is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with SharpNEAT.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-#if NET4
+﻿using SharpNeat.Core;
+using SharpNeat.EvolutionAlgorithms;
+using SharpNeat.EvolutionAlgorithms.ComplexityRegulation;
+using SharpNeat.Genomes.Neat;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 using System.Diagnostics;
-using SharpNeat.Core;
 using SharpNeat.DistanceMetrics;
-using SharpNeat.EvolutionAlgorithms.ComplexityRegulation;
 using SharpNeat.SpeciationStrategies;
 using SharpNeat.Utility;
+using SharpNeat;
+using UnityNeatPlugin;
 
-namespace SharpNeat.EvolutionAlgorithms
+namespace UnityNeatPlugin
 {
-    /// <summary>
+
+    public class PassiveNeatAlgorithm : PassiveNeatEvolutionAlgorithm<NeatGenome>
+    {
+        /// <summary>
+        /// Constructs with the provided NeatEvolutionAlgorithmParameters and ISpeciationStrategy.
+        /// </summary>
+        public PassiveNeatAlgorithm(NeatEvolutionAlgorithmParameters eaParams,
+                                    ISpeciationStrategy<NeatGenome> speciationStrategy,
+                                    IComplexityRegulationStrategy complexityRegulationStrategy)
+            : base(eaParams, speciationStrategy, complexityRegulationStrategy)
+        {
+
+        }
+
+    }
+   /// <summary>
     /// Implementation of the NEAT evolution algorithm. 
     /// Incorporates:
     ///     - Speciation with fitness sharing.
     ///     - Creating offspring via both sexual and asexual reproduction.
     /// </summary>
     /// <typeparam name="TGenome">The genome type that the algorithm will operate on.</typeparam>
-    public class NeatEvolutionAlgorithm<TGenome> : AbstractGenerationalAlgorithm<TGenome>
+    public class PassiveNeatEvolutionAlgorithm<TGenome> : AbstractGenerationalAlgorithm<TGenome>
         where TGenome : class, IGenome<TGenome>
     {
         NeatEvolutionAlgorithmParameters _eaParams;
@@ -59,13 +60,13 @@ namespace SharpNeat.EvolutionAlgorithms
         /// Constructs with the default NeatEvolutionAlgorithmParameters and speciation strategy 
         /// (KMeansClusteringStrategy with ManhattanDistanceMetric).
         /// </summary>
-        public NeatEvolutionAlgorithm()
+        public PassiveNeatEvolutionAlgorithm()
         {
             _eaParams = new NeatEvolutionAlgorithmParameters();
             _eaParamsComplexifying = _eaParams;
             _eaParamsSimplifying = _eaParams.CreateSimplifyingParameters();
             _stats = new NeatAlgorithmStats(_eaParams);
-            _speciationStrategy = new KMeansClusteringStrategy<TGenome>(new ManhattanDistanceMetric());
+            _speciationStrategy = new KMeansClusteringStrategy<TGenome>(new ManhattanDistanceMetricNet35());
 
             _complexityRegulationMode = ComplexityRegulationMode.Complexifying;
             _complexityRegulationStrategy = new NullComplexityRegulationStrategy();
@@ -74,7 +75,7 @@ namespace SharpNeat.EvolutionAlgorithms
         /// <summary>
         /// Constructs with the provided NeatEvolutionAlgorithmParameters and ISpeciationStrategy.
         /// </summary>
-        public NeatEvolutionAlgorithm(NeatEvolutionAlgorithmParameters eaParams,
+        public PassiveNeatEvolutionAlgorithm(NeatEvolutionAlgorithmParameters eaParams,
                                       ISpeciationStrategy<TGenome> speciationStrategy,
                                       IComplexityRegulationStrategy complexityRegulationStrategy)
         {
@@ -183,20 +184,21 @@ namespace SharpNeat.EvolutionAlgorithms
 
         #region Evolution Algorithm Main Method [PerformOneGeneration]
 
-        /// <summary>
-        /// Progress forward by one generation. Perform one generation/iteration of the evolution algorithm.
-        /// </summary>
-        protected override void PerformOneGeneration()
+        public void IncreaseGenerationCounter()
+        {
+            _currentGeneration++;
+        }
+        public void PerformOneGeneration_BeforeEvaluation(out bool emptySpeciesFlag, out List<TGenome> offspringList)
         {
             // Calculate statistics for each specie (mean fitness, target size, number of offspring to produce etc.)
             int offspringCount;
             SpecieStats[] specieStatsArr = CalcSpecieStats(out offspringCount);
 
             // Create offspring.
-            List<TGenome> offspringList = CreateOffspring(specieStatsArr, offspringCount);
+            offspringList = CreateOffspring(specieStatsArr, offspringCount);
 
             // Trim species back to their elite genomes.
-            bool emptySpeciesFlag = TrimSpeciesBackToElite(specieStatsArr);
+            emptySpeciesFlag = TrimSpeciesBackToElite(specieStatsArr);
 
             // Rebuild _genomeList. It will now contain just the elite genomes.
             RebuildGenomeList();
@@ -206,12 +208,17 @@ namespace SharpNeat.EvolutionAlgorithms
             // (otherwise we could just evaluate offspringList).
             _genomeList.AddRange(offspringList);
 
+        }
+        public void PerformOneGeneration_Evaluation()
+        {
             // Evaluate genomes.
             _genomeListEvaluator.Evaluate(_genomeList);
-
+        }
+        public void PerformOneGeneration_AfterEvaluation(bool emptySpeciesFlag, List<TGenome> offspringList)
+        {
             // Integrate offspring into species.
-            if(emptySpeciesFlag)
-            {   
+            if (emptySpeciesFlag)
+            {
                 // We have one or more terminated species. Therefore we need to fully re-speciate all genomes to divide them
                 // evenly between the required number of species.
 
@@ -224,13 +231,13 @@ namespace SharpNeat.EvolutionAlgorithms
             else
             {
                 // Integrate offspring into the existing species. 
-                _speciationStrategy.SpeciateOffspring(offspringList, _specieList);            
+                _speciationStrategy.SpeciateOffspring(offspringList, _specieList);
             }
             Debug.Assert(!TestForEmptySpecies(_specieList), "Speciation resulted in one or more empty species.");
 
             // Sort the genomes in each specie. Fittest first (secondary sort - youngest first).
             SortSpecieGenomes();
-             
+
             // Update stats and store reference to best genome.
             UpdateBestGenome();
             UpdateStats();
@@ -240,7 +247,7 @@ namespace SharpNeat.EvolutionAlgorithms
             // (e.g. reduce or disable additive mutations).
             _complexityRegulationMode = _complexityRegulationStrategy.DetermineMode(_stats);
             _genomeFactory.SearchMode = (int)_complexityRegulationMode;
-            switch(_complexityRegulationMode)
+            switch (_complexityRegulationMode)
             {
                 case ComplexityRegulationMode.Complexifying:
                     _eaParams = _eaParamsComplexifying;
@@ -252,6 +259,18 @@ namespace SharpNeat.EvolutionAlgorithms
 
             // TODO: More checks.
             Debug.Assert(_genomeList.Count == _populationSize);
+        }
+
+        /// <summary>
+        /// Progress forward by one generation. Perform one generation/iteration of the evolution algorithm.
+        /// </summary>
+        protected override void PerformOneGeneration()
+        {
+            bool emptySpeciesFlag;
+            List<TGenome> offspringList;
+            PerformOneGeneration_BeforeEvaluation(out emptySpeciesFlag, out offspringList);
+            PerformOneGeneration_Evaluation();
+            PerformOneGeneration_AfterEvaluation(emptySpeciesFlag, offspringList);
         }
 
         #endregion
@@ -836,7 +855,7 @@ namespace SharpNeat.EvolutionAlgorithms
         {
             int count = specieStatsArr.Length;
             for(int i=0; i<count; i++) {
-                Debug.Write("[" + _specieList[i].GenomeList.Count.ToString() + "," + specieStatsArr[i]._targetSizeInt + "] " );
+                Debug.WriteLine("[" + _specieList[i].GenomeList.Count.ToString() + "," + specieStatsArr[i]._targetSizeInt + "] " );
             }
             Debug.WriteLine(String.Empty);
         }
@@ -871,7 +890,11 @@ namespace SharpNeat.EvolutionAlgorithms
             public int _selectionSizeInt;
         }
 
+
+
+
+
+
         #endregion
     }
 }
-#endif

@@ -65,6 +65,11 @@ namespace SharpNeat.Utility
     ///   - Added NextByte() method.
     ///   - Added new statically declared seedRng FastRandom to allow easy creation of multiple FastRandoms with different seeds 
     ///     within a single clock tick.
+    ///     
+    /// Colin Green, 2011-10-04
+    ///  - Seeds are now hashed. Without this the first random sample for nearby seeds (1,2,3, etc.) are very similar 
+    ///    (have a similar bit pattern). Thanks to Francois Guibert for identifying this problem.
+    /// 
     /// </summary>
     public class FastRandom
     {
@@ -120,8 +125,22 @@ namespace SharpNeat.Utility
         {
             // The only stipulation stated for the xorshift RNG is that at least one of
             // the seeds x,y,z,w is non-zero. We fulfill that requirement by only allowing
-            // resetting of the x seed
-            _x = (uint)seed;
+            // resetting of the x seed.
+
+            // The first random sample will be very closely related to the value of _x we set here. 
+            // Thus setting _x = seed will result in a close correlation between the bit patterns of the seed and
+            // the first random sample, therefore if the seed has a pattern (e.g. 1,2,3) then there will also be 
+            // a recognisable pattern across the first random samples.
+            //
+            // Such a strong correlation between the seed and the first random sample is an undesirable
+            // charactersitic of a RNG, therefore we significantly weaken any correlation by hashing the seed's bits. 
+            // This is achieved by multiplying the seed with four large primes each with bits distributed over the
+            // full length of a 32bit value, finally adding the results to give _x.
+            _x = (uint)(  (seed * 1431655781) 
+                        + (seed * 1183186591)
+                        + (seed * 622729787)
+                        + (seed * 338294347));
+
             _y = Y;
             _z = Z;
             _w = W;
@@ -206,7 +225,7 @@ namespace SharpNeat.Utility
         }
 
         /// <summary>
-        /// Generates a random double. Values returned are from 0.0 up to but not including 1.0.
+        /// Generates a random double. Values returned are over the range [0, 1). That is, inclusive of 0.0 and exclusive of 1.0.
         /// </summary>
         public double NextDouble()
         {   
@@ -344,6 +363,19 @@ namespace SharpNeat.Utility
             uint t = _x^(_x<<11);
             _x=_y; _y=_z; _z=_w;
             return (int)(0x7FFFFFFF&(_w=(_w^(_w>>19))^(t^(t>>8))));
+        }
+
+        /// <summary>
+        /// Generates a random double. Values returned are over the range (0, 1). That is, exclusive of both 0.0 and 1.0.
+        /// </summary>
+        public double NextDoubleNonZero()
+        {
+            uint t = _x^(_x<<11);
+            _x=_y; _y=_z; _z=_w;
+
+            // See notes on NextDouble(). Here we generate a random value from 0 to 0x7f ff ff fe, and add one
+            // to generate a random value from 1 to 0x7f ff ff ff.
+            return REAL_UNIT_INT*(int)((0x7FFFFFFE&(_w=(_w^(_w>>19))^(t^(t>>8))))+1U); 
         }
 
         // Buffer 32 bits in bitBuffer, return 1 at a time, keep track of how many have been returned
