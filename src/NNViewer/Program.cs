@@ -82,6 +82,62 @@ using SharpNeat.Genomes.Neat;
 
     }
 
+    public class NeatBrain4
+    {
+        public const int COUNT_SELF_SENSOR = 3;
+        public const int COUNT_ENEMY_SENSOR = 2;
+        public const int COUNT_FOOD_SENSOR = 2;
+        public const float DISTANCE_MAX = 40.0f;
+
+
+
+        public const string NAME = "NeatBrain4";
+        public const int COUNT_INPUT = COUNT_SELF_SENSOR + COUNT_ENEMY_SENSOR * 3 + COUNT_FOOD_SENSOR * 3;
+        public const int COUNT_OUTPUT = 3;
+
+
+        public static readonly NetworkActivationScheme sActivationScheme;
+        public static readonly NeatGenomeParameters sGenomeParams;
+
+        static NeatBrain4()
+        {
+            sActivationScheme = NetworkActivationScheme.CreateCyclicFixedTimestepsScheme(2);
+            sGenomeParams = new NeatGenomeParameters();
+            sGenomeParams.FeedforwardOnly = sActivationScheme.AcyclicNetwork;
+            sGenomeParams.InitialInterconnectionsProportion = 0.05;
+            sGenomeParams.ConnectionWeightRange = 5;
+            sGenomeParams.FitnessHistoryLength = 10;
+
+        }
+
+        public int InputCount
+        {
+            get
+            {
+                return COUNT_INPUT;
+            }
+        }
+        public int OutputCount
+        {
+            get
+            {
+                return COUNT_OUTPUT;
+            }
+        }
+
+
+
+        public NetworkActivationScheme ActivationScheme
+        {
+            get { return sActivationScheme; }
+        }
+
+        public NeatGenomeParameters GenomeParams
+        {
+            get { return sGenomeParams; }
+        }
+
+    }
 
     static class Program
     {
@@ -97,8 +153,12 @@ using SharpNeat.Genomes.Neat;
             StringReader sr = new StringReader(xmldata);
 
 
-            NeatGenomeDecoder decoder = new NeatGenomeDecoder(SimpleNeatBrain3.sActivationScheme);
-            NeatGenomeFactory mGenomeFactory = new NeatGenomeFactory(SimpleNeatBrain3.COUNT_INPUT, SimpleNeatBrain3.COUNT_OUTPUT, SimpleNeatBrain3.sGenomeParams);
+            //NeatGenomeDecoder decoder = new NeatGenomeDecoder(SimpleNeatBrain3.sActivationScheme);
+            //NeatGenomeFactory mGenomeFactory = new NeatGenomeFactory(SimpleNeatBrain3.COUNT_INPUT, SimpleNeatBrain3.COUNT_OUTPUT, SimpleNeatBrain3.sGenomeParams);
+
+            NeatGenomeDecoder decoder = new NeatGenomeDecoder(NeatBrain4.sActivationScheme);
+            NeatGenomeFactory mGenomeFactory = new NeatGenomeFactory(NeatBrain4.COUNT_INPUT, NeatBrain4.COUNT_OUTPUT, NeatBrain4.sGenomeParams);
+            
             
             
             XmlReader reader = XmlReader.Create(sr);
