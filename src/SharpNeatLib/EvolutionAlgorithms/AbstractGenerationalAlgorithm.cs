@@ -21,7 +21,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using SharpNeat.Core;
-
+#if NET4
+using log4net;
+#endif
 // Disable missing comment warnings for non-private variables.
 #pragma warning disable 1591
 
