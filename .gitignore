@@ -4,3 +4,4 @@ bin
 obj
 /*.suo
 *.suo
+/src/SharpNeatGUI/Resources/Thumbs.db

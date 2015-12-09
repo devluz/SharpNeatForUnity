@@ -16,6 +16,10 @@ using UnityNeatPlugin;
 namespace UnityNeatPlugin
 {
 
+    /// <summary>
+    /// Same as NeatEvolutionAlgorithm but allows to move to the next generation without having to give
+    /// control away to another thread.
+    /// </summary>
     public class PassiveNeatAlgorithm : PassiveNeatEvolutionAlgorithm<NeatGenome>
     {
         /// <summary>
@@ -23,14 +27,14 @@ namespace UnityNeatPlugin
         /// </summary>
         public PassiveNeatAlgorithm(NeatEvolutionAlgorithmParameters eaParams,
                                     ISpeciationStrategy<NeatGenome> speciationStrategy,
-                                    IComplexityRegulationStrategy complexityRegulationStrategy)
+                                    IComplexityRegulationStrategy complexityRegulationStrategy, uint startGeneration)
             : base(eaParams, speciationStrategy, complexityRegulationStrategy)
         {
-
+            _currentGeneration = startGeneration;
         }
 
     }
-   /// <summary>
+    /// <summary>
     /// Implementation of the NEAT evolution algorithm. 
     /// Incorporates:
     ///     - Speciation with fitness sharing.
@@ -142,7 +146,12 @@ namespace UnityNeatPlugin
                                         IGenomeFactory<TGenome> genomeFactory,
                                         List<TGenome> genomeList)
         {
+            //just an ugly thing to allow to leave AbstractGenerationalAlgorithm unchanged:
+            //backup the current generation as it gets overwritten during the parents init process
+            uint startgeneration = _currentGeneration;
+
             base.Initialize(genomeListEvaluator, genomeFactory, genomeList);
+            _currentGeneration = startgeneration;
             Initialize();
         }
 
@@ -172,7 +181,7 @@ namespace UnityNeatPlugin
             // Speciate the genomes.
             _specieList = _speciationStrategy.InitializeSpeciation(_genomeList, _eaParams.SpecieCount);
             Debug.Assert(!TestForEmptySpecies(_specieList), "Speciation resulted in one or more empty species.");
-            
+
             // Sort the genomes in each specie fittest first, secondary sort youngest first.
             SortSpecieGenomes();
 
@@ -188,7 +197,7 @@ namespace UnityNeatPlugin
         {
             _currentGeneration++;
         }
-        public void PerformOneGeneration_BeforeEvaluation(out bool emptySpeciesFlag, out List<TGenome> offspringList)
+        public void PerformOneGeneration_CreateOffspring(out bool emptySpeciesFlag, out List<TGenome> offspringList)
         {
             // Calculate statistics for each specie (mean fitness, target size, number of offspring to produce etc.)
             int offspringCount;
@@ -209,11 +218,16 @@ namespace UnityNeatPlugin
             _genomeList.AddRange(offspringList);
 
         }
-        public void PerformOneGeneration_Evaluation()
+        public void PerformOneGeneration_StartEvaluation()
         {
             // Evaluate genomes.
             _genomeListEvaluator.Evaluate(_genomeList);
         }
+        /// <summary>
+        /// Integrate the offspring in the current species lists and sort the lists
+        /// </summary>
+        /// <param name="emptySpeciesFlag"></param>
+        /// <param name="offspringList"></param>
         public void PerformOneGeneration_AfterEvaluation(bool emptySpeciesFlag, List<TGenome> offspringList)
         {
             // Integrate offspring into species.
@@ -268,8 +282,8 @@ namespace UnityNeatPlugin
         {
             bool emptySpeciesFlag;
             List<TGenome> offspringList;
-            PerformOneGeneration_BeforeEvaluation(out emptySpeciesFlag, out offspringList);
-            PerformOneGeneration_Evaluation();
+            PerformOneGeneration_CreateOffspring(out emptySpeciesFlag, out offspringList);
+            PerformOneGeneration_StartEvaluation();
             PerformOneGeneration_AfterEvaluation(emptySpeciesFlag, offspringList);
         }
 
@@ -293,8 +307,8 @@ namespace UnityNeatPlugin
             // Build stats array and get the mean fitness of each specie.
             int specieCount = _specieList.Count;
             SpecieStats[] specieStatsArr = new SpecieStats[specieCount];
-            for(int i=0; i<specieCount; i++)
-            {   
+            for (int i = 0; i < specieCount; i++)
+            {
                 SpecieStats inst = new SpecieStats();
                 specieStatsArr[i] = inst;
                 inst._meanFitness = _specieList[i].CalcMeanFitness();
@@ -306,12 +320,12 @@ namespace UnityNeatPlugin
             // overall target population size due to rounding of each real/fractional target size.
             int totalTargetSizeInt = 0;
 
-            if(0.0 == totalMeanFitness)
+            if (0.0 == totalMeanFitness)
             {   // Handle specific case where all genomes/species have a zero fitness. 
                 // Assign all species an equal targetSize.
                 double targetSizeReal = (double)_populationSize / (double)specieCount;
 
-                for(int i=0; i<specieCount; i++) 
+                for (int i = 0; i < specieCount; i++)
                 {
                     SpecieStats inst = specieStatsArr[i];
                     inst._targetSizeReal = targetSizeReal;
@@ -327,7 +341,7 @@ namespace UnityNeatPlugin
             else
             {
                 // The size of each specie is based on its fitness relative to the other species.
-                for(int i=0; i<specieCount; i++)
+                for (int i = 0; i < specieCount; i++)
                 {
                     SpecieStats inst = specieStatsArr[i];
                     inst._targetSizeReal = (inst._meanFitness / totalMeanFitness) * (double)_populationSize;
@@ -356,13 +370,13 @@ namespace UnityNeatPlugin
             // method but we adjust specie target sizes down rather than up.
             int targetSizeDeltaInt = totalTargetSizeInt - _populationSize;
 
-            if(targetSizeDeltaInt < 0)
+            if (targetSizeDeltaInt < 0)
             {
                 // Check for special case. If we are short by just 1 then increment targetSizeInt for the specie containing
                 // the best genome. We always ensure that this specie has a minimum target size of 1 with a final test (below),
                 // by incrementing here we avoid the probabilistic allocation below followed by a further correction if
                 // the champ specie ended up with a zero target size.
-                if(-1 == targetSizeDeltaInt)
+                if (-1 == targetSizeDeltaInt)
                 {
                     specieStatsArr[_bestSpecieIdx]._targetSizeInt++;
                 }
@@ -371,7 +385,7 @@ namespace UnityNeatPlugin
                     // We are short of the required populationSize. Add the required additional allocations.
                     // Determine each specie's relative probability of receiving additional allocation.
                     double[] probabilities = new double[specieCount];
-                    for(int i=0; i<specieCount; i++) 
+                    for (int i = 0; i < specieCount; i++)
                     {
                         SpecieStats inst = specieStatsArr[i];
                         probabilities[i] = Math.Max(0.0, inst._targetSizeReal - (double)inst._targetSizeInt);
@@ -385,19 +399,19 @@ namespace UnityNeatPlugin
                     // after each allocation (to reflect that allocation).
                     // targetSizeDeltaInt is negative, so flip the sign for code clarity.
                     targetSizeDeltaInt *= -1;
-                    for(int i=0; i<targetSizeDeltaInt; i++)
+                    for (int i = 0; i < targetSizeDeltaInt; i++)
                     {
                         int specieIdx = RouletteWheel.SingleThrow(rwl, _rng);
                         specieStatsArr[specieIdx]._targetSizeInt++;
                     }
                 }
             }
-            else if(targetSizeDeltaInt > 0)
+            else if (targetSizeDeltaInt > 0)
             {
                 // We have overshot the required populationSize. Adjust target sizes down to compensate.
                 // Determine each specie's relative probability of target size downward adjustment.
                 double[] probabilities = new double[specieCount];
-                for(int i=0; i<specieCount; i++)
+                for (int i = 0; i < specieCount; i++)
                 {
                     SpecieStats inst = specieStatsArr[i];
                     probabilities[i] = Math.Max(0.0, (double)inst._targetSizeInt - inst._targetSizeReal);
@@ -409,12 +423,13 @@ namespace UnityNeatPlugin
                 // Probabilistically decrement specie target sizes.
                 // ENHANCEMENT: We can improve the selection fairness by updating the RouletteWheelLayout 
                 // after each decrement (to reflect that decrement).
-                for(int i=0; i<targetSizeDeltaInt;)
+                for (int i = 0; i < targetSizeDeltaInt; )
                 {
                     int specieIdx = RouletteWheel.SingleThrow(rwl, _rng);
 
                     // Skip empty species. This can happen because the same species can be selected more than once.
-                    if(0 != specieStatsArr[specieIdx]._targetSizeInt) {   
+                    if (0 != specieStatsArr[specieIdx]._targetSizeInt)
+                    {
                         specieStatsArr[specieIdx]._targetSizeInt--;
                         i++;
                     }
@@ -427,26 +442,28 @@ namespace UnityNeatPlugin
             // TODO: Better way of ensuring champ species has non-zero target size?
             // However we need to check that the specie with the best genome has a non-zero targetSizeInt in order
             // to ensure that the best genome is preserved. A zero size may have been allocated in some pathological cases.
-            if(0 == specieStatsArr[_bestSpecieIdx]._targetSizeInt)
+            if (0 == specieStatsArr[_bestSpecieIdx]._targetSizeInt)
             {
                 specieStatsArr[_bestSpecieIdx]._targetSizeInt++;
 
                 // Adjust down the target size of one of the other species to compensate.
                 // Pick a specie at random (but not the champ specie). Note that this may result in a specie with a zero 
                 // target size, this is OK at this stage. We handle allocations of zero in PerformOneGeneration().
-                int idx = RouletteWheel.SingleThrowEven(specieCount-1, _rng);
-                idx = idx==_bestSpecieIdx ? idx+1 : idx;
+                int idx = RouletteWheel.SingleThrowEven(specieCount - 1, _rng);
+                idx = idx == _bestSpecieIdx ? idx + 1 : idx;
 
-                if(specieStatsArr[idx]._targetSizeInt > 0) {
+                if (specieStatsArr[idx]._targetSizeInt > 0)
+                {
                     specieStatsArr[idx]._targetSizeInt--;
                 }
-                else 
+                else
                 {   // Scan forward from this specie to find a suitable one.
                     bool done = false;
                     idx++;
-                    for(; idx<specieCount; idx++)
+                    for (; idx < specieCount; idx++)
                     {
-                        if(idx != _bestSpecieIdx && specieStatsArr[idx]._targetSizeInt > 0) {
+                        if (idx != _bestSpecieIdx && specieStatsArr[idx]._targetSizeInt > 0)
+                        {
                             specieStatsArr[idx]._targetSizeInt--;
                             done = true;
                             break;
@@ -454,17 +471,19 @@ namespace UnityNeatPlugin
                     }
 
                     // Scan forward from start of species list.
-                    if(!done)
+                    if (!done)
                     {
-                        for(int i=0; i<specieCount; i++)
+                        for (int i = 0; i < specieCount; i++)
                         {
-                            if(i != _bestSpecieIdx && specieStatsArr[i]._targetSizeInt > 0) {
+                            if (i != _bestSpecieIdx && specieStatsArr[i]._targetSizeInt > 0)
+                            {
                                 specieStatsArr[i]._targetSizeInt--;
                                 done = true;
                                 break;
                             }
                         }
-                        if(!done) {
+                        if (!done)
+                        {
                             throw new SharpNeatException("CalcSpecieStats(). Error adjusting target population size down. Is the population size less than or equal to the number of species?");
                         }
                     }
@@ -475,10 +494,11 @@ namespace UnityNeatPlugin
             // specie from the current generation and is a proportion of the specie's current size.
             // Also here we calculate the total number of offspring that will need to be generated.
             offspringCount = 0;
-            for(int i=0; i<specieCount; i++)
+            for (int i = 0; i < specieCount; i++)
             {
                 // Special case - zero target size.
-                if(0 == specieStatsArr[i]._targetSizeInt) {
+                if (0 == specieStatsArr[i]._targetSizeInt)
+                {
                     specieStatsArr[i]._eliteSizeInt = 0;
                     continue;
                 }
@@ -495,9 +515,9 @@ namespace UnityNeatPlugin
                 // Ensure the champ specie preserves the champ genome. We do this even if the targetsize is just 1
                 // - which means the champ genome will remain and no offspring will be produced from it, apart from 
                 // the (usually small) chance of a cross-species mating.
-                if(i == _bestSpecieIdx && inst._eliteSizeInt==0)
+                if (i == _bestSpecieIdx && inst._eliteSizeInt == 0)
                 {
-                    Debug.Assert(inst._targetSizeInt !=0, "Zero target size assigned to champ specie.");
+                    Debug.Assert(inst._targetSizeInt != 0, "Zero target size assigned to champ specie.");
                     inst._eliteSizeInt = 1;
                 }
 
@@ -538,12 +558,13 @@ namespace UnityNeatPlugin
             // If this is exactly 1 then we skip inter-species mating. One is a special case because for 0 the 
             // species all get an even chance of selection, and for >1 we can just select normally.
             int nonZeroSpecieCount = 0;
-            for(int i=0; i<specieCount; i++) 
+            for (int i = 0; i < specieCount; i++)
             {
                 // Array of probabilities for specie selection. Note that some of these probabilites can be zero, but at least one of them won't be.
                 SpecieStats inst = specieStatsArr[i];
                 specieFitnessArr[i] = inst._selectionSizeInt;
-                if(0 != inst._selectionSizeInt) {
+                if (0 != inst._selectionSizeInt)
+                {
                     nonZeroSpecieCount++;
                 }
 
@@ -551,7 +572,8 @@ namespace UnityNeatPlugin
                 // that specie. Fitter genomes have higher probability of selection.
                 List<TGenome> genomeList = _specieList[i].GenomeList;
                 double[] probabilities = new double[inst._selectionSizeInt];
-                for(int j=0; j<inst._selectionSizeInt; j++) {
+                for (int j = 0; j < inst._selectionSizeInt; j++)
+                {
                     probabilities[j] = genomeList[j].EvaluationInfo.Fitness;
                 }
                 rwlArr[i] = new RouletteWheelLayout(probabilities);
@@ -562,7 +584,7 @@ namespace UnityNeatPlugin
 
             // Produce offspring from each specie in turn and store them in offspringList.
             List<TGenome> offspringList = new List<TGenome>(offspringCount);
-            for(int specieIdx=0; specieIdx<specieCount; specieIdx++)
+            for (int specieIdx = 0; specieIdx < specieCount; specieIdx++)
             {
                 SpecieStats inst = specieStatsArr[specieIdx];
                 List<TGenome> genomeList = _specieList[specieIdx].GenomeList;
@@ -570,8 +592,8 @@ namespace UnityNeatPlugin
                 // Get RouletteWheelLayout for genome selection.
                 RouletteWheelLayout rwl = rwlArr[specieIdx];
 
-            // --- Produce the required number of offspring from asexual reproduction.
-                for(int i=0; i<inst._offspringAsexualCount; i++)
+                // --- Produce the required number of offspring from asexual reproduction.
+                for (int i = 0; i < inst._offspringAsexualCount; i++)
                 {
                     int genomeIdx = RouletteWheel.SingleThrow(rwl, _rng);
                     TGenome offspring = genomeList[genomeIdx].CreateOffspring(_currentGeneration);
@@ -579,19 +601,19 @@ namespace UnityNeatPlugin
                 }
                 _stats._asexualOffspringCount += (ulong)inst._offspringAsexualCount;
 
-            // --- Produce the required number of offspring from sexual reproduction.
+                // --- Produce the required number of offspring from sexual reproduction.
                 // Cross-specie mating.
                 // If nonZeroSpecieCount is exactly 1 then we skip inter-species mating. One is a special case because
                 // for 0 the  species all get an even chance of selection, and for >1 we can just select species normally.
-                int crossSpecieMatings = nonZeroSpecieCount==1 ? 0 :
-                                            (int)Utilities.ProbabilisticRound(_eaParams.InterspeciesMatingProportion 
+                int crossSpecieMatings = nonZeroSpecieCount == 1 ? 0 :
+                                            (int)Utilities.ProbabilisticRound(_eaParams.InterspeciesMatingProportion
                                                                             * inst._offspringSexualCount, _rng);
                 _stats._sexualOffspringCount += (ulong)(inst._offspringSexualCount - crossSpecieMatings);
                 _stats._interspeciesOffspringCount += (ulong)crossSpecieMatings;
 
                 // An index that keeps track of how many offspring have been produced in total.
                 int matingsCount = 0;
-                for(; matingsCount<crossSpecieMatings; matingsCount++)
+                for (; matingsCount < crossSpecieMatings; matingsCount++)
                 {
                     TGenome offspring = CreateOffspring_CrossSpecieMating(rwl, rwlArr, rwlSpecies, specieIdx, genomeList);
                     offspringList.Add(offspring);
@@ -599,10 +621,10 @@ namespace UnityNeatPlugin
 
                 // For the remainder we use normal intra-specie mating.
                 // Test for special case - we only have one genome to select from in the current specie. 
-                if(1 == inst._selectionSizeInt)
-                {   
+                if (1 == inst._selectionSizeInt)
+                {
                     // Fall-back to asexual reproduction.
-                    for(; matingsCount<inst._offspringSexualCount; matingsCount++)
+                    for (; matingsCount < inst._offspringSexualCount; matingsCount++)
                     {
                         int genomeIdx = RouletteWheel.SingleThrow(rwl, _rng);
                         TGenome offspring = genomeList[genomeIdx].CreateOffspring(_currentGeneration);
@@ -610,9 +632,9 @@ namespace UnityNeatPlugin
                     }
                 }
                 else
-                {   
+                {
                     // Remainder of matings are normal within-specie.
-                    for(; matingsCount<inst._offspringSexualCount; matingsCount++)
+                    for (; matingsCount < inst._offspringSexualCount; matingsCount++)
                     {
                         // Select parents. SelectRouletteWheelItem() guarantees parent2Idx!=parent1Idx
                         int parent1Idx = RouletteWheel.SingleThrow(rwl, _rng);
@@ -620,7 +642,7 @@ namespace UnityNeatPlugin
 
                         // Remove selected parent from set of possible outcomes.
                         RouletteWheelLayout rwlTmp = rwl.RemoveOutcome(parent1Idx);
-                        if(0.0 != rwlTmp.ProbabilitiesTotal)
+                        if (0.0 != rwlTmp.ProbabilitiesTotal)
                         {   // Get the two parents to mate.
                             int parent2Idx = RouletteWheel.SingleThrow(rwlTmp, _rng);
                             TGenome parent2 = genomeList[parent2Idx];
@@ -661,7 +683,7 @@ namespace UnityNeatPlugin
             // Select specie other than current one for 2nd parent genome.
             RouletteWheelLayout rwlSpeciesTmp = rwlSpecies.RemoveOutcome(currentSpecieIdx);
             int specie2Idx = RouletteWheel.SingleThrow(rwlSpeciesTmp, _rng);
-            
+
             // Select a parent genome from the second specie.
             int parent2Idx = RouletteWheel.SingleThrow(rwlArr[specie2Idx], _rng);
 
@@ -691,12 +713,12 @@ namespace UnityNeatPlugin
             int bestSpecieIdx = -1;
 
             int count = _specieList.Count;
-            for(int i=0; i<count; i++)
+            for (int i = 0; i < count; i++)
             {
                 // Get the specie's first genome. Genomes are sorted, therefore this is also the fittest 
                 // genome in the specie.
                 TGenome genome = _specieList[i].GenomeList[0];
-                if(genome.EvaluationInfo.Fitness > bestFitness)
+                if (genome.EvaluationInfo.Fitness > bestFitness)
                 {
                     bestGenome = genome;
                     bestFitness = genome.EvaluationInfo.Fitness;
@@ -718,14 +740,14 @@ namespace UnityNeatPlugin
 
             // Evaluation per second.
             DateTime now = DateTime.Now;
-            TimeSpan duration = now - _stats._evalsPerSecLastSampleTime;  
-          
+            TimeSpan duration = now - _stats._evalsPerSecLastSampleTime;
+
             // To smooth out the evals per sec statistic we only update if at least 1 second has elapsed 
             // since it was last updated.
-            if(duration.Ticks > 9999)
+            if (duration.Ticks > 9999)
             {
                 long evalsSinceLastUpdate = (long)(_genomeListEvaluator.EvaluationCount - _stats._evalsCountAtLastUpdate);
-                _stats._evaluationsPerSec = (int)((evalsSinceLastUpdate*1e7) / duration.Ticks);
+                _stats._evaluationsPerSec = (int)((evalsSinceLastUpdate * 1e7) / duration.Ticks);
 
                 // Reset working variables.
                 _stats._evalsCountAtLastUpdate = _genomeListEvaluator.EvaluationCount;
@@ -738,7 +760,8 @@ namespace UnityNeatPlugin
             double maxComplexity = totalComplexity;
 
             int count = _genomeList.Count;
-            for(int i=1; i<count; i++) {
+            for (int i = 1; i < count; i++)
+            {
                 totalFitness += _genomeList[i].EvaluationInfo.Fitness;
                 totalComplexity += _genomeList[i].Complexity;
                 maxComplexity = Math.Max(maxComplexity, _genomeList[i].Complexity);
@@ -753,7 +776,8 @@ namespace UnityNeatPlugin
             // Specie champs mean fitness.
             double totalSpecieChampFitness = _specieList[0].GenomeList[0].EvaluationInfo.Fitness;
             int specieCount = _specieList.Count;
-            for(int i=1; i<specieCount; i++) {
+            for (int i = 1; i < specieCount; i++)
+            {
                 totalSpecieChampFitness += _specieList[i].GenomeList[0].EvaluationInfo.Fitness;
             }
             _stats._meanSpecieChampFitness = totalSpecieChampFitness / specieCount;
@@ -778,7 +802,7 @@ namespace UnityNeatPlugin
             int maxSize = minSize;
             int specieCount = _specieList.Count;
 
-            for(int i=0; i<specieCount; i++)
+            for (int i = 0; i < specieCount; i++)
             {
                 _specieList[i].GenomeList.Sort(GenomeFitnessComparer<TGenome>.Singleton);
                 minSize = Math.Min(minSize, _specieList[i].GenomeList.Count);
@@ -795,7 +819,8 @@ namespace UnityNeatPlugin
         /// </summary>
         private void ClearAllSpecies()
         {
-            foreach(Specie<TGenome> specie in _specieList) {
+            foreach (Specie<TGenome> specie in _specieList)
+            {
                 specie.GenomeList.Clear();
             }
         }
@@ -806,7 +831,8 @@ namespace UnityNeatPlugin
         private void RebuildGenomeList()
         {
             _genomeList.Clear();
-            foreach(Specie<TGenome> specie in _specieList) {
+            foreach (Specie<TGenome> specie in _specieList)
+            {
                 _genomeList.AddRange(specie.GenomeList);
             }
         }
@@ -819,7 +845,7 @@ namespace UnityNeatPlugin
         {
             bool emptySpeciesFlag = false;
             int count = _specieList.Count;
-            for(int i=0; i<count; i++)
+            for (int i = 0; i < count; i++)
             {
                 Specie<TGenome> specie = _specieList[i];
                 SpecieStats stats = specieStatsArr[i];
@@ -827,7 +853,8 @@ namespace UnityNeatPlugin
                 int removeCount = specie.GenomeList.Count - stats._eliteSizeInt;
                 specie.GenomeList.RemoveRange(stats._eliteSizeInt, removeCount);
 
-                if(0 == stats._eliteSizeInt) {
+                if (0 == stats._eliteSizeInt)
+                {
                     emptySpeciesFlag = true;
                 }
             }
@@ -843,8 +870,10 @@ namespace UnityNeatPlugin
         /// </summary>
         private bool TestForEmptySpecies(IList<Specie<TGenome>> specieList)
         {
-            foreach(Specie<TGenome> specie in specieList) {
-                if(specie.GenomeList.Count == 0) {
+            foreach (Specie<TGenome> specie in specieList)
+            {
+                if (specie.GenomeList.Count == 0)
+                {
                     return true;
                 }
             }
@@ -854,8 +883,9 @@ namespace UnityNeatPlugin
         private void DumpSpecieCounts(SpecieStats[] specieStatsArr)
         {
             int count = specieStatsArr.Length;
-            for(int i=0; i<count; i++) {
-                Debug.WriteLine("[" + _specieList[i].GenomeList.Count.ToString() + "," + specieStatsArr[i]._targetSizeInt + "] " );
+            for (int i = 0; i < count; i++)
+            {
+                Debug.WriteLine("[" + _specieList[i].GenomeList.Count.ToString() + "," + specieStatsArr[i]._targetSizeInt + "] ");
             }
             Debug.WriteLine(String.Empty);
         }
@@ -863,7 +893,8 @@ namespace UnityNeatPlugin
         private static int SumTargetSizeInt(SpecieStats[] specieStatsArr)
         {
             int total = 0;
-            foreach(SpecieStats inst in specieStatsArr) {
+            foreach (SpecieStats inst in specieStatsArr)
+            {
                 total += inst._targetSizeInt;
             }
             return total;
@@ -885,7 +916,7 @@ namespace UnityNeatPlugin
             public int _offspringCount;
             public int _offspringAsexualCount;
             public int _offspringSexualCount;
-      
+
             // Selection data.
             public int _selectionSizeInt;
         }

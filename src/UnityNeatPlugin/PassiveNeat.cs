@@ -16,6 +16,11 @@ using System.Xml;
 
 namespace UnityNeatPlugin
 {
+
+    /// <summary>
+    /// Just a wrapper around Passive Neat Algorithm. 
+    /// Might be not ready for general use yet. It was designed for a very narrow scenario.
+    /// </summary>
     public class PassiveNeat
     {
 
@@ -82,20 +87,45 @@ namespace UnityNeatPlugin
 
 
 
-        private FitnessEvaluationEnumerator mReuseEnumerator;
 
-        //temporary variables stored during shift to the next generation
-        private bool mInGenerationShift = false;
-        public bool _InGenerationShift
+
+        //
+        /// <summary>
+        /// Indicates that fitness isn't yet known for all genes if true.
+        /// 
+        /// If false all genes were evaluated and a new generation can be started.
+        /// 
+        /// This will be true after creation or after loading a file as the fitness will be unknown and only after
+        /// the first evaluation there will be access to statistics
+        /// </summary>
+        private bool mInEvaluation = true;
+        public bool _InEvaluation
         {
-            get { return mInGenerationShift; }
+            get { return mInEvaluation; }
         }
+
+        /// <summary>
+        /// This will be false after restart until the first evaluation is complete
+        /// the first FinishGeneration was called
+        /// </summary>
+        private bool mIsFullyIntialized = false;
+        public bool _IsFullyIntialized
+        {
+            get
+            {
+                return mIsFullyIntialized;
+            }
+        }
+
+
         private bool mTmpEmptySpeciesFlag;
         private List<NeatGenome> mTmpOffspringList;
 
+
+
         public PassiveNeat()
         {
-            mReuseEnumerator = new FitnessEvaluationEnumerator(this);
+
         }
 
         public void Init(int inputCount, int outputCount, NeatEvolutionAlgorithmParameters param,
@@ -108,19 +138,23 @@ namespace UnityNeatPlugin
             mOutputCount = outputCount;
             Init();
             InitGenome(popultionCount);
+            mInEvaluation = true;
         }
         public void Init(int inputCount, int outputCount, NeatEvolutionAlgorithmParameters param,
-                            NetworkActivationScheme activationScheme, NeatGenomeParameters genomeParams, XmlReader xmlGenomeList)
+                            NetworkActivationScheme activationScheme, NeatGenomeParameters genomeParams, XmlReader xmlGenomeList, uint startGeneration)
         {
             mParams = param;
             mActivationScheme = activationScheme;
             mGenomeParams = genomeParams;
             mInputCount = inputCount;
             mOutputCount = outputCount;
-            Init();
+
+            Init(startGeneration);
             InitGenome(xmlGenomeList);
+            mInEvaluation = true;
+
         }
-        private void Init()
+        private void Init(uint startgeneration = 0)
         {
             // Create distance metric. Mismatched genes have a fixed distance of 10; for matched genes the distance is their weigth difference.
             mDistanceMetric = new ManhattanDistanceMetricNet35(1.0, 0.0, 10.0);
@@ -140,7 +174,7 @@ namespace UnityNeatPlugin
             mGenomeFactory = new NeatGenomeFactory(mInputCount, mOutputCount, mGenomeParams);
 
 
-            mNeatAlgorithm = new PassiveNeatAlgorithm(mParams, mSpeciationStrategy, mComplexityRegulationStrategy);
+            mNeatAlgorithm = new PassiveNeatAlgorithm(mParams, mSpeciationStrategy, mComplexityRegulationStrategy, startgeneration);
 
         }
 
@@ -154,64 +188,52 @@ namespace UnityNeatPlugin
         private void InitGenome(XmlReader xmlGenomeList)
         {
             mGenomeList = NeatGenomeXmlIO.ReadCompleteGenomeList(xmlGenomeList, false, (NeatGenomeFactory)mGenomeFactory);
-            xmlGenomeList.Close();
         }
 
 
-
-        public void StartGeneration()
+        /// <summary>
+        /// This will either create new offspring and prepare everything for evaluation if the algorithm is fully initialized or do nothing
+        /// if not initialized (in this case the fitness need to be known first to initialize everythong properly
+        /// </summary>
+        public bool StartGeneration()
         {
             if (mNeatAlgorithm.SpecieList == null)
             {
+                return false;
                 //not yet fully initialized. wait until the first time FinishGeneration is called and the first generation is ready
             }
             else
             {
-                mInGenerationShift = true;
+                mInEvaluation = true;
                 this._NeatAlgorithm.IncreaseGenerationCounter();
-                this._NeatAlgorithm.PerformOneGeneration_BeforeEvaluation(out mTmpEmptySpeciesFlag, out mTmpOffspringList);
-                this._NeatAlgorithm.PerformOneGeneration_Evaluation();
+                this._NeatAlgorithm.PerformOneGeneration_CreateOffspring(out mTmpEmptySpeciesFlag, out mTmpOffspringList);
+
+                //this isn't doing anything in the current version
+                this._NeatAlgorithm.PerformOneGeneration_StartEvaluation();
+                return true;
             }
         }
 
+        /// <summary>
+        /// This can be called after all genes were evalulated. it will calculate species and update statistics
+        /// (either by finishing the evaluation or by reinitializing the algorithm if a new file was loaded)
+        /// </summary>
         public void FinishGeneration()
         {
-
+            //initialize it first if this didn't happen yet
             if (mNeatAlgorithm.SpecieList == null)
             {
                 //user evauluated the first generation. initialize the whole neat algoirthm now
                 mNeatAlgorithm.Initialize(new PassiveListEvaluator(), mGenomeFactory, mGenomeList);
+                mIsFullyIntialized = true;
             }
             else
             {
                 this._NeatAlgorithm.PerformOneGeneration_AfterEvaluation(mTmpEmptySpeciesFlag, mTmpOffspringList);
-                mInGenerationShift = false;
             }
+            mInEvaluation = false;
         }
-        //public bool NextGeneration()
-        //{
-        //    //first step is the initialization and the first rating + creation of species
-        //    if (mNeatAlgorithm.SpecieList == null)
-        //    {
-        //        mNeatAlgorithm.Initialize(new PassiveListEvaluator(), mGenomeFactory, mGenomeList);
-        //    }
-        //    else
-        //    {
-        //        ((PassiveNeatAlgorithm)mNeatAlgorithm).CalcNextGeneration();
-        //    }
-        //    return true;
-        //}
 
-        /// <summary>
-        /// This will return an emumerator for all Genomes + allow easy cached access to the neuronal networks for fitness evaluation
-        /// 
-        /// There is only one instance! This will reset all other enumerators return by this property as well!
-        /// </summary>
-        public FitnessEvaluationEnumerator GetReusableFitnessEnumerator()
-        {
-            mReuseEnumerator.Reset();
-            return mReuseEnumerator;
-        }
 
 
         public class FitnessEvaluation
@@ -252,68 +274,6 @@ namespace UnityNeatPlugin
             }
         }
 
-        public class FitnessEvaluationEnumerator : IEnumerator<FitnessEvaluation>
-        {
-            private PassiveNeat mNeat;
-            private int mIndex = -1;
-
-            public int _Index
-            {
-                get { return mIndex; }
-            }
-
-            private FitnessEvaluation mCurrentEvaluation; //reference will be reused
-
-            public FitnessEvaluation Current
-            {
-                get
-                {
-                    if (IsInBoundry() == false)
-                        return null;
-                    return mCurrentEvaluation;
-                }
-            }
-
-            public FitnessEvaluationEnumerator(PassiveNeat neat)
-            {
-                mNeat = neat;
-                mCurrentEvaluation = new FitnessEvaluation(mNeat);
-            }
-
-            private bool IsInBoundry()
-            {
-                if (mIndex < 0 || mIndex >= mNeat._GenomeList.Count)
-                    return false;
-                return true;
-            }
-
-            public void Dispose()
-            {
-                //we don't use any resources
-            }
-
-            object System.Collections.IEnumerator.Current
-            {
-                get
-                {
-                    return Current;
-                }
-            }
-
-            public bool MoveNext()
-            {
-                mIndex++;
-                if (IsInBoundry() == false)
-                    return false;
-                mCurrentEvaluation._Genome = mNeat._GenomeList[mIndex];
-                return true;
-            }
-
-            public void Reset()
-            {
-                mIndex = -1;
-            }
-        }
 
 
 

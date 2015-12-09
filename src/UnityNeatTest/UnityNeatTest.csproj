@@ -44,13 +44,13 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\SharpNeatLib\SharpNeatLib.csproj">
-      <Project>{abc5c77a-deba-420c-926c-bd3e6f37ae15}</Project>
-      <Name>SharpNeatLib</Name>
-    </ProjectReference>
     <ProjectReference Include="..\UnityNeatPlugin\UnityNeatPlugin.csproj">
       <Project>{a8035978-dce6-4370-8196-126a93b88818}</Project>
       <Name>UnityNeatPlugin</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\UnitySharpNeatLib\UnitySharpNeatLib.csproj">
+      <Project>{a4584f36-4836-4192-a8cf-60fac43d87a1}</Project>
+      <Name>UnitySharpNeatLib</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

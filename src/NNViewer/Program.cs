@@ -188,8 +188,8 @@ using SharpNeat.Genomes.Neat;
             {
                 genome = CreateNeatBrainFromFile(pfd.FileName);
                 // Create form.
-                GenomeForm _bestGenomeForm = new GenomeForm("Best Genome", genomeView, genome);
-
+                GenomeForm _bestGenomeForm = new GenomeForm(pfd.FileName, genomeView, genome);
+                _bestGenomeForm.BackColor = System.Drawing.Color.White;
 
                 _bestGenomeForm.Size = new System.Drawing.Size(1280, 720);
 
